@@ -1,0 +1,4 @@
+<strings xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://developer.garmin.com/downloads/connect-iq/resources.xsd">
+    <string id="AppName">School-timetable</string>
+    <string id="SeedTitle">Timetable Seed</string>
+</strings>

@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>עורך מערכת שעות</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --card: #1e293b;
+    --card2: #263449;
+    --accent: #38bdf8;
+    --accent2: #22c55e;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --danger: #ef4444;
+    --border: #334155;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", Arial, sans-serif;
+    background: linear-gradient(160deg, var(--bg), #111827);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 24px 16px 80px;
+  }
+  h1 {
+    text-align: center;
+    font-size: 1.6rem;
+    margin-bottom: 4px;
+  }
+  .subtitle {
+    text-align: center;
+    color: var(--muted);
+    margin-bottom: 24px;
+    font-size: 0.95rem;
+  }
+  .container {
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+  }
+  .card h2 {
+    margin-top: 0;
+    font-size: 1.1rem;
+    color: var(--accent);
+  }
+  .days-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .day-toggle {
+    padding: 10px 16px;
+    border-radius: 10px;
+    background: var(--card2);
+    border: 2px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+    font-weight: 600;
+    transition: all .15s;
+  }
+  .day-toggle.active {
+    border-color: var(--accent2);
+    background: rgba(34,197,94,0.15);
+    color: var(--accent2);
+  }
+  .periods-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .period-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .period-row input[type="time"] {
+    background: var(--card2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 6px 8px;
+    font-size: 0.95rem;
+  }
+  .period-row span {
+    color: var(--muted);
+  }
+  .period-row .idx {
+    width: 26px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  .period-row label.break-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--muted);
+    font-size: 0.85rem;
+    cursor: pointer;
+    margin-inline-start: 6px;
+  }
+  tr.break-row td.hourcell { color: #f59e0b; }
+  tr.break-row td.breakcell {
+    color: #f59e0b;
+    font-weight: 600;
+    text-align: center;
+  }
+  button {
+    cursor: pointer;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-weight: 600;
+    font-size: 0.9rem;
+  }
+  .btn-add { background: var(--accent); color: #06283a; }
+  .btn-remove { background: var(--danger); color: white; padding: 6px 10px; }
+  .btn-primary {
+    background: var(--accent2);
+    color: #06280f;
+    font-size: 1rem;
+    padding: 12px 20px;
+    width: 100%;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    overflow-x: auto;
+    display: block;
+  }
+  thead th {
+    background: var(--card2);
+    padding: 8px 6px;
+    font-size: 0.85rem;
+    color: var(--accent);
+    position: sticky;
+    top: 0;
+  }
+  tbody td {
+    padding: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  tbody td.hourcell {
+    color: var(--muted);
+    font-size: 0.8rem;
+    white-space: nowrap;
+    text-align: center;
+  }
+  td input[type="text"] {
+    width: 100%;
+    min-width: 90px;
+    background: var(--card2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 0.9rem;
+  }
+  .actions-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 14px;
+    flex-wrap: wrap;
+  }
+  .actions-row button { flex: 1; }
+  #seedBox {
+    width: 100%;
+    background: var(--card2);
+    border: 1px solid var(--border);
+    color: var(--accent2);
+    border-radius: 8px;
+    padding: 12px;
+    font-family: monospace;
+    font-size: 0.95rem;
+    word-break: break-all;
+    min-height: 60px;
+    margin-top: 10px;
+  }
+  .copy-btn {
+    margin-top: 10px;
+    background: var(--accent);
+    color: #06283a;
+  }
+  .hint {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-top: 8px;
+  }
+  .table-wrap { overflow-x: auto; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🕒 עורך מערכת שעות</h1>
+  <p class="subtitle">בחר ימי לימוד, שעות שיעורים, ומה יש בכל שעה — ואז קבל קוד SEED להזנה בהגדרות האפליקציה בשעון</p>
+
+  <div class="card">
+    <h2>1. ימי לימוד</h2>
+    <div class="days-row" id="daysRow"></div>
+  </div>
+
+  <div class="card">
+    <h2>2. שעות השיעורים</h2>
+    <div class="periods-list" id="periodsList"></div>
+    <div class="actions-row">
+      <button class="btn-add" onclick="addPeriod()">+ הוסף שעה</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>3. מערכת השעות</h2>
+    <div class="table-wrap">
+      <table id="grid"></table>
+    </div>
+    <p class="hint">השאר תא ריק אם אין שיעור באותה שעה</p>
+  </div>
+
+  <div class="card">
+    <h2>4. קוד SEED</h2>
+    <p class="hint" style="color:#f59e0b">⚠ השעון לא תומך בעברית — יש להזין את שמות המקצועות באנגלית או בתעתיק לטיני (למשל Math, Hebrew, PE).</p>
+    <button class="btn-primary" onclick="generateSeed()">צור SEED</button>
+    <div id="seedBox">לחץ "צור SEED" כדי לייצר את הקוד</div>
+    <button class="copy-btn" onclick="copySeed()">העתק SEED</button>
+    <p class="hint">הדבק את הקוד הזה בהגדרות האפליקציה ב-Garmin Connect IQ (Timetable Seed).</p>
+  </div>
+</div>
+
+<script>
+const DAY_NAMES = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
+const DAY_CODES = [0,1,2,3,4,5,6];
+
+let activeDays = [0,1,2,3,4]; // Sun-Thu default (Israeli school week)
+let periods = [
+  ["08:00","08:45", false],
+  ["08:45","09:30", false],
+  ["09:30","09:45", true],
+  ["09:45","10:30", false],
+  ["10:30","11:15", false],
+  ["11:15","11:30", true],
+  ["11:30","12:15", false],
+  ["12:15","13:00", false],
+];
+// lessons[dayCode] = array of subject strings, index-aligned with periods
+let lessons = {};
+
+function initLessons() {
+  DAY_CODES.forEach(d => {
+    if (!lessons[d]) lessons[d] = [];
+    while (lessons[d].length < periods.length) lessons[d].push("");
+    lessons[d].length = periods.length;
+  });
+}
+
+function renderDays() {
+  const row = document.getElementById("daysRow");
+  row.innerHTML = "";
+  DAY_CODES.forEach(d => {
+    const el = document.createElement("div");
+    el.className = "day-toggle" + (activeDays.includes(d) ? " active" : "");
+    el.textContent = DAY_NAMES[d];
+    el.onclick = () => {
+      if (activeDays.includes(d)) {
+        activeDays = activeDays.filter(x => x !== d);
+      } else {
+        activeDays.push(d);
+        activeDays.sort((a,b)=>a-b);
+      }
+      renderDays();
+      renderGrid();
+    };
+    row.appendChild(el);
+  });
+}
+
+function renderPeriods() {
+  const list = document.getElementById("periodsList");
+  list.innerHTML = "";
+  periods.forEach((p, i) => {
+    const row = document.createElement("div");
+    row.className = "period-row";
+    const isBreak = !!p[2];
+    row.innerHTML = `
+      <span class="idx">${i+1}</span>
+      <input type="time" value="${p[0]}" onchange="updatePeriod(${i},0,this.value)">
+      <span>—</span>
+      <input type="time" value="${p[1]}" onchange="updatePeriod(${i},1,this.value)">
+      <label class="break-label"><input type="checkbox" ${isBreak?"checked":""} onchange="toggleBreak(${i},this.checked)"> הפסקה</label>
+      <button class="btn-remove" onclick="removePeriod(${i})">✕</button>
+    `;
+    list.appendChild(row);
+  });
+}
+
+function updatePeriod(i, idx, val) {
+  periods[i][idx] = val;
+}
+function toggleBreak(i, checked) {
+  periods[i][2] = checked;
+  renderGrid();
+}
+function addPeriod() {
+  const last = periods[periods.length-1];
+  periods.push([last ? last[1] : "08:00", last ? last[1] : "08:45", false]);
+  initLessons();
+  renderPeriods();
+  renderGrid();
+}
+function removePeriod(i) {
+  periods.splice(i,1);
+  DAY_CODES.forEach(d => lessons[d] && lessons[d].splice(i,1));
+  renderPeriods();
+  renderGrid();
+}
+
+function renderGrid() {
+  initLessons();
+  const table = document.getElementById("grid");
+  table.innerHTML = "";
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  headRow.innerHTML = "<th>שעה</th>" + activeDays.map(d => `<th>${DAY_NAMES[d]}</th>`).join("");
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  periods.forEach((p, i) => {
+    const tr = document.createElement("tr");
+    if (p[2]) {
+      tr.className = "break-row";
+      tr.innerHTML = `<td class="hourcell">${p[0]}-${p[1]}</td><td class="breakcell" colspan="${activeDays.length}">☕ הפסקה</td>`;
+    } else {
+      let cells = `<td class="hourcell">${p[0]}-${p[1]}</td>`;
+      activeDays.forEach(d => {
+        const val = (lessons[d] && lessons[d][i]) || "";
+        cells += `<td><input type="text" value="${val.replace(/"/g,'&quot;')}" placeholder="free" onchange="updateLesson(${d},${i},this.value)"></td>`;
+      });
+      tr.innerHTML = cells;
+    }
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+}
+
+function updateLesson(day, periodIdx, val) {
+  if (!lessons[day]) lessons[day] = [];
+  lessons[day][periodIdx] = val;
+}
+
+// Seed format: P=hh:mm-hh:mmB?,...|D=0,1,2,...|0:subj1,subj2,...;1:subj1,subj2,...
+// A trailing "B" on a period marks it as a break (same across all days).
+// Uses simple delimiters (|, comma, colon, semicolon) that Monkey C can split() on.
+function generateSeed() {
+  const box = document.getElementById("seedBox");
+  const nonAscii = [];
+  activeDays.forEach(d => {
+    periods.forEach((p, i) => {
+      if (p[2]) return;
+      const val = ((lessons[d] && lessons[d][i]) || "").trim();
+      if (val && !/^[\x20-\x7E]*$/.test(val)) {
+        nonAscii.push(`${DAY_NAMES[d]}, שעה ${i+1}: "${val}"`);
+      }
+    });
+  });
+  if (nonAscii.length) {
+    box.style.color = "var(--danger)";
+    box.textContent = "שגיאה: השעון לא תומך בעברית או בתווים לא-אנגליים. יש לתקן:\n" + nonAscii.join("\n");
+    return;
+  }
+  box.style.color = "";
+
+  const pStr = "P=" + periods.map(p => `${p[0]}-${p[1]}${p[2] ? "B" : ""}`).join(",");
+  const dStr = "D=" + activeDays.join(",");
+  const lStr = "L=" + activeDays.map(d => {
+    const subs = periods.map((p, i) => {
+      if (p[2]) return "";
+      return ((lessons[d] && lessons[d][i]) || "").trim().replace(/[|;:]/g,"");
+    }).join(",");
+    return `${d}:${subs}`;
+  }).join(";");
+  const seed = [pStr, dStr, lStr].join("|");
+  box.textContent = seed;
+}
+
+function copySeed() {
+  const text = document.getElementById("seedBox").textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    alert("הועתק!");
+  });
+}
+
+initLessons();
+renderDays();
+renderPeriods();
+renderGrid();
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "monkeyc",
+            "request": "launch",
+            "name": "Run School-timetable in Simulator",
+            "program": "${workspaceFolder}/bin/School-timetable.prg",
+            "manifest": "${workspaceFolder}/manifest.xml",
+            "jungleFiles": "${workspaceFolder}/monkey.jungle",
+            "device": "fenix7",
+            "developerKeyPath": "${workspaceFolder}/developer_key.der"
+        }
+    ]
+}
