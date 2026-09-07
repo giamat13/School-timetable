@@ -38,7 +38,7 @@ class NoSeedView extends WatchUi.View {
         dc.drawBitmap(cx - qrSize / 2, h * 0.5 - qrSize / 2, qr);
 
         dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, h * 0.86, Graphics.FONT_XTINY, SETUP_URL, Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(cx, h * 0.85, Graphics.FONT_XTINY, "giamat13.github.io", Graphics.TEXT_JUSTIFY_CENTER);
     }
 
     function onHide() as Void {

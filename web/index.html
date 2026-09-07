@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="he" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>עורך מערכת שעות</title>
+<title>School Timetable Editor</title>
 <style>
   :root {
     --bg: #0f172a;
@@ -132,6 +132,13 @@
     padding: 12px 20px;
     width: 100%;
   }
+  .btn-secondary {
+    background: var(--card2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    font-size: 0.95rem;
+    padding: 10px 16px;
+  }
   table {
     width: 100%;
     border-collapse: collapse;
@@ -173,7 +180,7 @@
     flex-wrap: wrap;
   }
   .actions-row button { flex: 1; }
-  #seedBox {
+  #seedBox, #importBox {
     width: 100%;
     background: var(--card2);
     border: 1px solid var(--border);
@@ -186,6 +193,10 @@
     min-height: 60px;
     margin-top: 10px;
   }
+  #importBox {
+    color: var(--text);
+    resize: vertical;
+  }
   .copy-btn {
     margin-top: 10px;
     background: var(--accent);
@@ -197,46 +208,61 @@
     margin-top: 8px;
   }
   .table-wrap { overflow-x: auto; }
+  #importMsg {
+    margin-top: 8px;
+    font-size: 0.85rem;
+  }
+  #importMsg.error { color: var(--danger); }
+  #importMsg.success { color: var(--accent2); }
 </style>
 </head>
 <body>
 <div class="container">
-  <h1>🕒 עורך מערכת שעות</h1>
-  <p class="subtitle">בחר ימי לימוד, שעות שיעורים, ומה יש בכל שעה — ואז קבל קוד SEED להזנה בהגדרות האפליקציה בשעון</p>
+  <h1>🕒 School Timetable Editor</h1>
+  <p class="subtitle">Choose your school days, lesson times, and what's on each period — then get a SEED code to paste into the watch app's settings.</p>
 
   <div class="card">
-    <h2>1. ימי לימוד</h2>
+    <h2>0. Import an existing SEED (optional)</h2>
+    <textarea id="importBox" rows="2" placeholder="Paste a SEED code here to load it for editing"></textarea>
+    <div class="actions-row">
+      <button class="btn-secondary" onclick="importSeed()">Load SEED</button>
+    </div>
+    <p id="importMsg"></p>
+  </div>
+
+  <div class="card">
+    <h2>1. School days</h2>
     <div class="days-row" id="daysRow"></div>
   </div>
 
   <div class="card">
-    <h2>2. שעות השיעורים</h2>
+    <h2>2. Lesson periods</h2>
     <div class="periods-list" id="periodsList"></div>
     <div class="actions-row">
-      <button class="btn-add" onclick="addPeriod()">+ הוסף שעה</button>
+      <button class="btn-add" onclick="addPeriod()">+ Add period</button>
     </div>
   </div>
 
   <div class="card">
-    <h2>3. מערכת השעות</h2>
+    <h2>3. Timetable</h2>
     <div class="table-wrap">
       <table id="grid"></table>
     </div>
-    <p class="hint">השאר תא ריק אם אין שיעור באותה שעה</p>
+    <p class="hint">Leave a cell empty if there's no lesson at that period</p>
   </div>
 
   <div class="card">
-    <h2>4. קוד SEED</h2>
-    <p class="hint" style="color:#f59e0b">⚠ השעון לא תומך בעברית — יש להזין את שמות המקצועות באנגלית או בתעתיק לטיני (למשל Math, Hebrew, PE).</p>
-    <button class="btn-primary" onclick="generateSeed()">צור SEED</button>
-    <div id="seedBox">לחץ "צור SEED" כדי לייצר את הקוד</div>
-    <button class="copy-btn" onclick="copySeed()">העתק SEED</button>
-    <p class="hint">הדבק את הקוד הזה בהגדרות האפליקציה ב-Garmin Connect IQ (Timetable Seed).</p>
+    <h2>4. SEED code</h2>
+    <p class="hint" style="color:#f59e0b">⚠ The watch does not support non-Latin scripts — use English or Latin transliteration for subject names (e.g. Math, Hebrew, PE).</p>
+    <button class="btn-primary" onclick="generateSeed()">Generate SEED</button>
+    <div id="seedBox">Click "Generate SEED" to produce the code</div>
+    <button class="copy-btn" onclick="copySeed()">Copy SEED</button>
+    <p class="hint">Paste this code into the app's settings in Garmin Connect IQ (Timetable Seed).</p>
   </div>
 </div>
 
 <script>
-const DAY_NAMES = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
+const DAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const DAY_CODES = [0,1,2,3,4,5,6];
 
 let activeDays = [0,1,2,3,4]; // Sun-Thu default (Israeli school week)
@@ -294,7 +320,7 @@ function renderPeriods() {
       <input type="time" value="${p[0]}" onchange="updatePeriod(${i},0,this.value)">
       <span>—</span>
       <input type="time" value="${p[1]}" onchange="updatePeriod(${i},1,this.value)">
-      <label class="break-label"><input type="checkbox" ${isBreak?"checked":""} onchange="toggleBreak(${i},this.checked)"> הפסקה</label>
+      <label class="break-label"><input type="checkbox" ${isBreak?"checked":""} onchange="toggleBreak(${i},this.checked)"> Break</label>
       <button class="btn-remove" onclick="removePeriod(${i})">✕</button>
     `;
     list.appendChild(row);
@@ -328,7 +354,7 @@ function renderGrid() {
   table.innerHTML = "";
   const thead = document.createElement("thead");
   const headRow = document.createElement("tr");
-  headRow.innerHTML = "<th>שעה</th>" + activeDays.map(d => `<th>${DAY_NAMES[d]}</th>`).join("");
+  headRow.innerHTML = "<th>Time</th>" + activeDays.map(d => `<th>${DAY_NAMES[d]}</th>`).join("");
   thead.appendChild(headRow);
   table.appendChild(thead);
 
@@ -337,7 +363,7 @@ function renderGrid() {
     const tr = document.createElement("tr");
     if (p[2]) {
       tr.className = "break-row";
-      tr.innerHTML = `<td class="hourcell">${p[0]}-${p[1]}</td><td class="breakcell" colspan="${activeDays.length}">☕ הפסקה</td>`;
+      tr.innerHTML = `<td class="hourcell">${p[0]}-${p[1]}</td><td class="breakcell" colspan="${activeDays.length}">☕ Break</td>`;
     } else {
       let cells = `<td class="hourcell">${p[0]}-${p[1]}</td>`;
       activeDays.forEach(d => {
@@ -358,7 +384,6 @@ function updateLesson(day, periodIdx, val) {
 
 // Seed format: P=hh:mm-hh:mmB?,...|D=0,1,2,...|0:subj1,subj2,...;1:subj1,subj2,...
 // A trailing "B" on a period marks it as a break (same across all days).
-// Uses simple delimiters (|, comma, colon, semicolon) that Monkey C can split() on.
 function generateSeed() {
   const box = document.getElementById("seedBox");
   const nonAscii = [];
@@ -367,13 +392,13 @@ function generateSeed() {
       if (p[2]) return;
       const val = ((lessons[d] && lessons[d][i]) || "").trim();
       if (val && !/^[\x20-\x7E]*$/.test(val)) {
-        nonAscii.push(`${DAY_NAMES[d]}, שעה ${i+1}: "${val}"`);
+        nonAscii.push(`${DAY_NAMES[d]}, period ${i+1}: "${val}"`);
       }
     });
   });
   if (nonAscii.length) {
     box.style.color = "var(--danger)";
-    box.textContent = "שגיאה: השעון לא תומך בעברית או בתווים לא-אנגליים. יש לתקן:\n" + nonAscii.join("\n");
+    box.textContent = "Error: the watch does not support non-English characters. Please fix:\n" + nonAscii.join("\n");
     return;
   }
   box.style.color = "";
@@ -394,8 +419,72 @@ function generateSeed() {
 function copySeed() {
   const text = document.getElementById("seedBox").textContent;
   navigator.clipboard.writeText(text).then(() => {
-    alert("הועתק!");
+    alert("Copied!");
   });
+}
+
+// Parses a SEED string (mirrors the on-watch parser) and loads it into the editor state.
+function importSeed() {
+  const msg = document.getElementById("importMsg");
+  const raw = document.getElementById("importBox").value.trim();
+  if (!raw) {
+    msg.className = "error";
+    msg.textContent = "Paste a SEED code first.";
+    return;
+  }
+
+  try {
+    const sections = raw.split("|");
+    let pStr = null, dStr = null, lStr = null;
+    sections.forEach(s => {
+      if (s.startsWith("P=")) pStr = s.slice(2);
+      else if (s.startsWith("D=")) dStr = s.slice(2);
+      else if (s.startsWith("L=")) lStr = s.slice(2);
+    });
+    if (pStr === null || dStr === null || lStr === null) {
+      throw new Error("Missing P=, D= or L= section.");
+    }
+
+    const newPeriods = pStr.split(",").filter(x => x.length).map(part => {
+      const brk = part.endsWith("B");
+      const clean = brk ? part.slice(0, -1) : part;
+      const range = clean.split("-");
+      if (range.length !== 2) throw new Error(`Bad period: "${part}"`);
+      return [range[0], range[1], brk];
+    });
+    if (newPeriods.length === 0) throw new Error("No periods found.");
+
+    const newDays = dStr.split(",").filter(x => x.length).map(x => {
+      const n = parseInt(x, 10);
+      if (isNaN(n) || n < 0 || n > 6) throw new Error(`Bad day code: "${x}"`);
+      return n;
+    });
+    if (newDays.length === 0) throw new Error("No active days found.");
+
+    const newLessons = {};
+    lStr.split(";").filter(x => x.length).forEach(entry => {
+      const colon = entry.indexOf(":");
+      if (colon === -1) throw new Error(`Bad lesson entry: "${entry}"`);
+      const day = parseInt(entry.slice(0, colon), 10);
+      if (isNaN(day)) throw new Error(`Bad day in lesson entry: "${entry}"`);
+      const subs = entry.slice(colon + 1).split(",");
+      newLessons[day] = subs;
+    });
+
+    periods = newPeriods;
+    activeDays = newDays.sort((a,b)=>a-b);
+    lessons = newLessons;
+    initLessons();
+    renderDays();
+    renderPeriods();
+    renderGrid();
+
+    msg.className = "success";
+    msg.textContent = "SEED loaded successfully.";
+  } catch (e) {
+    msg.className = "error";
+    msg.textContent = "Could not parse SEED: " + e.message;
+  }
 }
 
 initLessons();
