@@ -311,12 +311,14 @@ function renderDays() {
 function renderPeriods() {
   const list = document.getElementById("periodsList");
   list.innerHTML = "";
+  let lessonNumber = 0;
   periods.forEach((p, i) => {
     const row = document.createElement("div");
     row.className = "period-row";
     const isBreak = !!p[2];
+    const idxLabel = isBreak ? "☕" : ++lessonNumber;
     row.innerHTML = `
-      <span class="idx">${i+1}</span>
+      <span class="idx">${idxLabel}</span>
       <input type="time" value="${p[0]}" onchange="updatePeriod(${i},0,this.value)">
       <span>—</span>
       <input type="time" value="${p[1]}" onchange="updatePeriod(${i},1,this.value)">
