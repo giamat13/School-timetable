@@ -336,9 +336,17 @@ function toggleBreak(i, checked) {
   periods[i][2] = checked;
   renderGrid();
 }
+function addMinutes(hhmm, minutes) {
+  const [h, m] = hhmm.split(":").map(Number);
+  const total = (h * 60 + m + minutes + 1440) % 1440;
+  const hh = String(Math.floor(total / 60)).padStart(2, "0");
+  const mm = String(total % 60).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
 function addPeriod() {
   const last = periods[periods.length-1];
-  periods.push([last ? last[1] : "08:00", last ? last[1] : "08:45", false]);
+  const start = last ? last[1] : "08:00";
+  periods.push([start, addMinutes(start, 45), false]);
   initLessons();
   renderPeriods();
   renderGrid();
@@ -370,7 +378,7 @@ function renderGrid() {
       let cells = `<td class="hourcell">${p[0]}-${p[1]}</td>`;
       activeDays.forEach(d => {
         const val = (lessons[d] && lessons[d][i]) || "";
-        cells += `<td><input type="text" value="${val.replace(/"/g,'&quot;')}" placeholder="free" onchange="updateLesson(${d},${i},this.value)"></td>`;
+        cells += `<td><input type="text" value="${val.replace(/"/g,'&quot;')}" placeholder="free" onchange="updateLesson(${d},${i},this.value); renderGrid();"></td>`;
       });
       tr.innerHTML = cells;
     }
@@ -379,9 +387,14 @@ function renderGrid() {
   table.appendChild(tbody);
 }
 
+// Strips characters that collide with the seed format's own delimiters.
+function sanitizeSubject(val) {
+  return val.replace(/[,|;:]/g, "");
+}
+
 function updateLesson(day, periodIdx, val) {
   if (!lessons[day]) lessons[day] = [];
-  lessons[day][periodIdx] = val;
+  lessons[day][periodIdx] = sanitizeSubject(val);
 }
 
 // Seed format: P=hh:mm-hh:mmB?,...|D=0,1,2,...|0:subj1,subj2,...;1:subj1,subj2,...

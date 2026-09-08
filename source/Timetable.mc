@@ -9,11 +9,13 @@ class Period {
     var startMinutes as Number; // minutes since midnight, for "current period" lookup
     var endMinutes as Number;
     var isBreak as Boolean;
+    var lessonNumber as Number; // 1-based, counting only non-break periods; 0 for breaks
 
-    function initialize(start as String, end as String, brk as Boolean) {
+    function initialize(start as String, end as String, brk as Boolean, num as Number) {
         startLabel = start;
         endLabel = end;
         isBreak = brk;
+        lessonNumber = num;
         startMinutes = Timetable.toMinutes(start);
         endMinutes = Timetable.toMinutes(end);
     }
@@ -63,6 +65,7 @@ class Timetable {
         }
 
         var periods = [] as Array<Period>;
+        var lessonNumber = 0;
         var pParts = Timetable.splitStr(pStr as String, ",");
         for (var i = 0; i < pParts.size(); i++) {
             var part = pParts[i] as String;
@@ -73,7 +76,8 @@ class Timetable {
             }
             var range = Timetable.splitStr(part, "-");
             if (range.size() != 2) { continue; }
-            periods.add(new Period(range[0] as String, range[1] as String, brk));
+            if (!brk) { lessonNumber++; }
+            periods.add(new Period(range[0] as String, range[1] as String, brk, brk ? 0 : lessonNumber));
         }
         if (periods.size() == 0) {
             return null;

@@ -3,6 +3,7 @@ import Toybox.WatchUi;
 import Toybox.Lang;
 import Toybox.Time;
 import Toybox.Time.Gregorian;
+import Toybox.System;
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as Array<String>;
 
@@ -98,8 +99,12 @@ class TimetableView extends WatchUi.View {
             subject = "Free";
         }
 
+        var dayLabel = DAY_NAMES[day];
+        if (!period.isBreak) {
+            dayLabel += "  •  Period " + period.lessonNumber;
+        }
         dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, h * 0.16, Graphics.FONT_MEDIUM, DAY_NAMES[day], Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(cx, h * 0.16, Graphics.FONT_MEDIUM, dayLabel, Graphics.TEXT_JUSTIFY_CENTER);
 
         dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
         dc.drawText(cx, h * 0.30, Graphics.FONT_SMALL, period.startLabel + " - " + period.endLabel, Graphics.TEXT_JUSTIFY_CENTER);
@@ -107,6 +112,19 @@ class TimetableView extends WatchUi.View {
         var subjectColor = period.isBreak ? Graphics.COLOR_ORANGE : Graphics.COLOR_WHITE;
         dc.setColor(subjectColor, Graphics.COLOR_TRANSPARENT);
         dc.drawText(cx, h * 0.5, Graphics.FONT_LARGE, subject, Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+
+        var clockTime = System.getClockTime();
+        var hour = clockTime.hour;
+        var suffix = "";
+        if (!System.getDeviceSettings().is24Hour) {
+            suffix = hour >= 12 ? " PM" : " AM";
+            hour = hour % 12;
+            if (hour == 0) { hour = 12; }
+        }
+        var minStr = clockTime.min < 10 ? "0" + clockTime.min : clockTime.min.toString();
+        var timeStr = hour.toString() + ":" + minStr + suffix;
+        dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(cx, h * 0.85, Graphics.FONT_SMALL, timeStr, Graphics.TEXT_JUSTIFY_CENTER);
     }
 
     function onHide() as Void {
