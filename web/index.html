@@ -397,8 +397,16 @@ function updateLesson(day, periodIdx, val) {
   lessons[day][periodIdx] = sanitizeSubject(val);
 }
 
-// Seed format: P=hh:mm-hh:mmB?,...|D=0,1,2,...|0:subj1,subj2,...;1:subj1,subj2,...
-// A trailing "B" on a period marks it as a break (same across all days).
+function timeToMinutes(hhmm) {
+  const [h, m] = hhmm.split(":").map(Number);
+  return h * 60 + m;
+}
+
+// Compact v2 seed: 2|T=<b36start>-<b36end>B?,...|D=0,1,...|S=subj,subj,...|L=d:code,code,...;...
+// Times are base36 minutes-since-midnight (shorter than "HH:MM"). Subjects are deduplicated
+// into a dictionary (S) and referenced by base36 index in L, so a repeated subject costs one
+// or two characters instead of being spelled out again. L only lists non-break periods —
+// breaks aren't given a slot at all, since they're the same "Break" on every day.
 function generateSeed() {
   const box = document.getElementById("seedBox");
   const nonAscii = [];
@@ -418,16 +426,35 @@ function generateSeed() {
   }
   box.style.color = "";
 
-  const pStr = "P=" + periods.map(p => `${p[0]}-${p[1]}${p[2] ? "B" : ""}`).join(",");
+  const tStr = "T=" + periods.map(p => {
+    const start = timeToMinutes(p[0]).toString(36);
+    const end = timeToMinutes(p[1]).toString(36);
+    return `${start}-${end}${p[2] ? "B" : ""}`;
+  }).join(",");
   const dStr = "D=" + activeDays.join(",");
+
+  const dictionary = [];
+  const indexOf = new Map();
+  function subjectIndex(subject) {
+    if (indexOf.has(subject)) return indexOf.get(subject);
+    const idx = dictionary.length;
+    dictionary.push(subject);
+    indexOf.set(subject, idx);
+    return idx;
+  }
+
   const lStr = "L=" + activeDays.map(d => {
-    const subs = periods.map((p, i) => {
-      if (p[2]) return "";
-      return ((lessons[d] && lessons[d][i]) || "").trim().replace(/[|;:]/g,"");
-    }).join(",");
-    return `${d}:${subs}`;
+    const codes = [];
+    periods.forEach((p, i) => {
+      if (p[2]) return; // breaks get no slot at all
+      const val = ((lessons[d] && lessons[d][i]) || "").trim();
+      codes.push(val ? subjectIndex(val).toString(36) : "");
+    });
+    return `${d}:${codes.join(",")}`;
   }).join(";");
-  const seed = [pStr, dStr, lStr].join("|");
+  const sStr = "S=" + dictionary.join(",");
+
+  const seed = "2|" + [tStr, dStr, sStr, lStr].join("|");
   box.textContent = seed;
 }
 
@@ -438,7 +465,112 @@ function copySeed() {
   });
 }
 
-// Parses a SEED string (mirrors the on-watch parser) and loads it into the editor state.
+function minutesToHHMM(m) {
+  const hh = String(Math.floor(m / 60)).padStart(2, "0");
+  const mm = String(m % 60).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
+// Parses the current compact v2 seed (2|T=...|D=...|S=...|L=...).
+function parseSeedV2(body) {
+  const sections = body.split("|");
+  let tStr = null, dStr = null, sStr = null, lStr = null;
+  sections.forEach(s => {
+    if (s.startsWith("T=")) tStr = s.slice(2);
+    else if (s.startsWith("D=")) dStr = s.slice(2);
+    else if (s.startsWith("S=")) sStr = s.slice(2);
+    else if (s.startsWith("L=")) lStr = s.slice(2);
+  });
+  if (tStr === null || dStr === null || sStr === null || lStr === null) {
+    throw new Error("Missing T=, D=, S= or L= section.");
+  }
+
+  const newPeriods = tStr.split(",").filter(x => x.length).map(part => {
+    const brk = part.endsWith("B");
+    const clean = brk ? part.slice(0, -1) : part;
+    const range = clean.split("-");
+    if (range.length !== 2) throw new Error(`Bad period: "${part}"`);
+    const start = minutesToHHMM(parseInt(range[0], 36));
+    const end = minutesToHHMM(parseInt(range[1], 36));
+    return [start, end, brk];
+  });
+  if (newPeriods.length === 0) throw new Error("No periods found.");
+
+  const newDays = dStr.split(",").filter(x => x.length).map(x => {
+    const n = parseInt(x, 10);
+    if (isNaN(n) || n < 0 || n > 6) throw new Error(`Bad day code: "${x}"`);
+    return n;
+  });
+  if (newDays.length === 0) throw new Error("No active days found.");
+
+  const dictionary = sStr.length ? sStr.split(",") : [];
+
+  const newLessons = {};
+  lStr.split(";").filter(x => x.length).forEach(entry => {
+    const colon = entry.indexOf(":");
+    if (colon === -1) throw new Error(`Bad lesson entry: "${entry}"`);
+    const day = parseInt(entry.slice(0, colon), 10);
+    if (isNaN(day)) throw new Error(`Bad day in lesson entry: "${entry}"`);
+    const codes = entry.slice(colon + 1).length ? entry.slice(colon + 1).split(",") : [];
+
+    const arr = [];
+    let codeIdx = 0;
+    newPeriods.forEach(p => {
+      if (p[2]) { arr.push(""); return; }
+      const code = codes[codeIdx] || "";
+      codeIdx++;
+      arr.push(code.length ? (dictionary[parseInt(code, 36)] || "") : "");
+    });
+    newLessons[day] = arr;
+  });
+
+  return { periods: newPeriods, days: newDays, lessons: newLessons };
+}
+
+// Parses the old verbose seed (P=hh:mm-hh:mmB?,...|D=...|L=...), for loading
+// timetables created before the compact v2 format existed.
+function parseSeedV1(raw) {
+  const sections = raw.split("|");
+  let pStr = null, dStr = null, lStr = null;
+  sections.forEach(s => {
+    if (s.startsWith("P=")) pStr = s.slice(2);
+    else if (s.startsWith("D=")) dStr = s.slice(2);
+    else if (s.startsWith("L=")) lStr = s.slice(2);
+  });
+  if (pStr === null || dStr === null || lStr === null) {
+    throw new Error("Missing P=, D= or L= section.");
+  }
+
+  const newPeriods = pStr.split(",").filter(x => x.length).map(part => {
+    const brk = part.endsWith("B");
+    const clean = brk ? part.slice(0, -1) : part;
+    const range = clean.split("-");
+    if (range.length !== 2) throw new Error(`Bad period: "${part}"`);
+    return [range[0], range[1], brk];
+  });
+  if (newPeriods.length === 0) throw new Error("No periods found.");
+
+  const newDays = dStr.split(",").filter(x => x.length).map(x => {
+    const n = parseInt(x, 10);
+    if (isNaN(n) || n < 0 || n > 6) throw new Error(`Bad day code: "${x}"`);
+    return n;
+  });
+  if (newDays.length === 0) throw new Error("No active days found.");
+
+  const newLessons = {};
+  lStr.split(";").filter(x => x.length).forEach(entry => {
+    const colon = entry.indexOf(":");
+    if (colon === -1) throw new Error(`Bad lesson entry: "${entry}"`);
+    const day = parseInt(entry.slice(0, colon), 10);
+    if (isNaN(day)) throw new Error(`Bad day in lesson entry: "${entry}"`);
+    const subs = entry.slice(colon + 1).split(",");
+    newLessons[day] = subs;
+  });
+
+  return { periods: newPeriods, days: newDays, lessons: newLessons };
+}
+
+// Parses a SEED string (v2 compact, or v1 legacy for old timetables) and loads it into the editor.
 function importSeed() {
   const msg = document.getElementById("importMsg");
   const raw = document.getElementById("importBox").value.trim();
@@ -449,46 +581,11 @@ function importSeed() {
   }
 
   try {
-    const sections = raw.split("|");
-    let pStr = null, dStr = null, lStr = null;
-    sections.forEach(s => {
-      if (s.startsWith("P=")) pStr = s.slice(2);
-      else if (s.startsWith("D=")) dStr = s.slice(2);
-      else if (s.startsWith("L=")) lStr = s.slice(2);
-    });
-    if (pStr === null || dStr === null || lStr === null) {
-      throw new Error("Missing P=, D= or L= section.");
-    }
+    const result = raw.startsWith("2|") ? parseSeedV2(raw.slice(2)) : parseSeedV1(raw);
 
-    const newPeriods = pStr.split(",").filter(x => x.length).map(part => {
-      const brk = part.endsWith("B");
-      const clean = brk ? part.slice(0, -1) : part;
-      const range = clean.split("-");
-      if (range.length !== 2) throw new Error(`Bad period: "${part}"`);
-      return [range[0], range[1], brk];
-    });
-    if (newPeriods.length === 0) throw new Error("No periods found.");
-
-    const newDays = dStr.split(",").filter(x => x.length).map(x => {
-      const n = parseInt(x, 10);
-      if (isNaN(n) || n < 0 || n > 6) throw new Error(`Bad day code: "${x}"`);
-      return n;
-    });
-    if (newDays.length === 0) throw new Error("No active days found.");
-
-    const newLessons = {};
-    lStr.split(";").filter(x => x.length).forEach(entry => {
-      const colon = entry.indexOf(":");
-      if (colon === -1) throw new Error(`Bad lesson entry: "${entry}"`);
-      const day = parseInt(entry.slice(0, colon), 10);
-      if (isNaN(day)) throw new Error(`Bad day in lesson entry: "${entry}"`);
-      const subs = entry.slice(colon + 1).split(",");
-      newLessons[day] = subs;
-    });
-
-    periods = newPeriods;
-    activeDays = newDays.sort((a,b)=>a-b);
-    lessons = newLessons;
+    periods = result.periods;
+    activeDays = result.days.sort((a,b)=>a-b);
+    lessons = result.lessons;
     initLessons();
     renderDays();
     renderPeriods();

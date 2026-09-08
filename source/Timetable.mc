@@ -48,8 +48,138 @@ class Timetable {
         return result;
     }
 
-    // Seed format: P=hh:mm-hh:mmB?,...|D=0,1,2,...|d:subj,subj,...;d:subj,...
+    // Decodes a base36 string (0-9, a-z) into a Number. Used for compact v2 seeds.
+    static function fromBase36(s as String) as Number {
+        var digits = "0123456789abcdefghijklmnopqrstuvwxyz";
+        var value = 0;
+        for (var i = 0; i < s.length(); i++) {
+            var c = s.substring(i, i + 1);
+            var d = digits.find(c);
+            if (d == null) { return 0; }
+            value = value * 36 + d;
+        }
+        return value;
+    }
+
+    // Formats minutes-since-midnight as "H:MM" for display.
+    static function formatMinutes(m as Number) as String {
+        var h = m / 60;
+        var mm = m % 60;
+        var mmStr = mm < 10 ? "0" + mm.toString() : mm.toString();
+        return h.toString() + ":" + mmStr;
+    }
+
+    // Dispatches to the current compact parser (v2, seeds prefixed "2|") or the
+    // original verbose parser (v1, no prefix) for backward-compat import of old seeds.
+    // New seeds are always generated in v2 by the web tool; v1 parsing exists only
+    // so timetables saved before the compact format still load.
     static function parse(seed as String) as Timetable? {
+        if (seed.length() >= 2 && seed.substring(0, 2).equals("2|")) {
+            return Timetable.parseV2(seed.substring(2, seed.length()));
+        }
+        return Timetable.parseV1(seed);
+    }
+
+    // Compact format: 2|T=<b36start>-<b36end>B?,...|D=0,1,...|S=subj,subj,...|L=d:code,code,...;...
+    // T holds all periods (base36 minutes-since-midnight). S is a dictionary of unique
+    // subject names. L holds one base36 index into S per NON-break period per day (breaks
+    // are skipped entirely, not just left blank), so repeated or absent subjects cost almost nothing.
+    static function parseV2(body as String) as Timetable? {
+        var sections = Timetable.splitStr(body, "|");
+        var tStr = null;
+        var dStr = null;
+        var sStr = null;
+        var lStr = null;
+        for (var i = 0; i < sections.size(); i++) {
+            var s = sections[i] as String;
+            if (s.find("T=") == 0) { tStr = s.substring(2, s.length()); }
+            else if (s.find("D=") == 0) { dStr = s.substring(2, s.length()); }
+            else if (s.find("S=") == 0) { sStr = s.substring(2, s.length()); }
+            else if (s.find("L=") == 0) { lStr = s.substring(2, s.length()); }
+        }
+        if (tStr == null || dStr == null || sStr == null || lStr == null) {
+            return null;
+        }
+
+        var periods = [] as Array<Period>;
+        var lessonNumber = 0;
+        var tParts = Timetable.splitStr(tStr as String, ",");
+        for (var i = 0; i < tParts.size(); i++) {
+            var part = tParts[i] as String;
+            var brk = false;
+            if (part.length() > 0 && part.substring(part.length() - 1, part.length()).equals("B")) {
+                brk = true;
+                part = part.substring(0, part.length() - 1);
+            }
+            var range = Timetable.splitStr(part, "-");
+            if (range.size() != 2) { continue; }
+            var startMin = Timetable.fromBase36(range[0] as String);
+            var endMin = Timetable.fromBase36(range[1] as String);
+            if (!brk) { lessonNumber++; }
+            periods.add(new Period(Timetable.formatMinutes(startMin), Timetable.formatMinutes(endMin), brk, brk ? 0 : lessonNumber));
+        }
+        if (periods.size() == 0) {
+            return null;
+        }
+
+        var days = [] as Array<Number>;
+        var dParts = Timetable.splitStr(dStr as String, ",");
+        for (var i = 0; i < dParts.size(); i++) {
+            var n = (dParts[i] as String).toNumber();
+            if (n != null) { days.add(n); }
+        }
+        if (days.size() == 0) {
+            return null;
+        }
+
+        var dictionary = [] as Array<String>;
+        if ((sStr as String).length() > 0) {
+            var sParts = Timetable.splitStr(sStr as String, ",");
+            for (var i = 0; i < sParts.size(); i++) {
+                dictionary.add(sParts[i] as String);
+            }
+        }
+
+        var lessons = {} as Dictionary<Number, Array<String> >;
+        var lParts = Timetable.splitStr(lStr as String, ";");
+        for (var i = 0; i < lParts.size(); i++) {
+            var entry = lParts[i] as String;
+            var colon = entry.find(":");
+            if (colon == null) { continue; }
+            var day = entry.substring(0, colon).toNumber();
+            if (day == null) { continue; }
+            var codesStr = entry.substring(colon + 1, entry.length());
+            var codes = codesStr.length() > 0 ? Timetable.splitStr(codesStr, ",") : ([] as Array<String>);
+
+            var arr = [] as Array<String>;
+            var codeIdx = 0;
+            for (var j = 0; j < periods.size(); j++) {
+                if (periods[j].isBreak) {
+                    arr.add("");
+                    continue;
+                }
+                var subject = "";
+                if (codeIdx < codes.size()) {
+                    var code = codes[codeIdx] as String;
+                    if (code.length() > 0) {
+                        var idx = Timetable.fromBase36(code);
+                        if (idx >= 0 && idx < dictionary.size()) {
+                            subject = dictionary[idx];
+                        }
+                    }
+                    codeIdx++;
+                }
+                arr.add(subject);
+            }
+            lessons[day] = arr;
+        }
+
+        return new Timetable(periods, days, lessons);
+    }
+
+    // Legacy verbose format: P=hh:mm-hh:mmB?,...|D=0,1,2,...|d:subj,subj,...;d:subj,...
+    // Kept for backward-compat import only; new seeds are never generated in this format.
+    static function parseV1(seed as String) as Timetable? {
         var sections = Timetable.splitStr(seed, "|");
         var pStr = null;
         var dStr = null;
