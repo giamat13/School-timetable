@@ -23,11 +23,11 @@ class TimetableDelegate extends WatchUi.BehaviorDelegate {
 
     function onSwipe(swipeEvent as WatchUi.SwipeEvent) as Boolean {
         var dir = swipeEvent.getDirection();
-        if (dir == WatchUi.SWIPE_UP) {
-            view.move(1);
+        if (dir == WatchUi.SWIPE_LEFT) {
+            view.moveDay(1);
             return true;
-        } else if (dir == WatchUi.SWIPE_DOWN) {
-            view.move(-1);
+        } else if (dir == WatchUi.SWIPE_RIGHT) {
+            view.moveDay(-1);
             return true;
         }
         return false;
@@ -45,7 +45,7 @@ class TimetableDelegate extends WatchUi.BehaviorDelegate {
 
 }
 
-// Delegate for the pushed, "entered" view: swipe up/down scrolls; back pops
+// Delegate for the pushed, "entered" view: swipe left/right navigates days; back pops
 // back out to the widget glance.
 class TimetableScrollDelegate extends WatchUi.BehaviorDelegate {
 
@@ -58,11 +58,11 @@ class TimetableScrollDelegate extends WatchUi.BehaviorDelegate {
 
     function onSwipe(swipeEvent as WatchUi.SwipeEvent) as Boolean {
         var dir = swipeEvent.getDirection();
-        if (dir == WatchUi.SWIPE_UP) {
-            view.move(1);
+        if (dir == WatchUi.SWIPE_LEFT) {
+            view.moveDay(1);
             return true;
-        } else if (dir == WatchUi.SWIPE_DOWN) {
-            view.move(-1);
+        } else if (dir == WatchUi.SWIPE_RIGHT) {
+            view.moveDay(-1);
             return true;
         }
         return false;

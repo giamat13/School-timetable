@@ -79,6 +79,18 @@ class TimetableView extends WatchUi.View {
         WatchUi.requestUpdate();
     }
 
+    function moveDay(delta as Number) as Void {
+        var numDays = timetable.activeDays.size();
+        if (numDays == 0) { return; }
+
+        var dayIdx = cursor / 1000;
+        var periodIdx = cursor % 1000;
+
+        dayIdx = (dayIdx + delta + numDays * 100) % numDays;
+        cursor = dayIdx * 1000 + periodIdx;
+        WatchUi.requestUpdate();
+    }
+
     function onUpdate(dc as Dc) as Void {
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
         dc.clear();
