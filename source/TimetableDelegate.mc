@@ -19,7 +19,10 @@ class TimetableDelegate extends WatchUi.BehaviorDelegate {
             view.move(-1);
             return true;
         }
-        return false;
+        // Older touch devices (e.g. vivoactive 4S) can report a scroll as a
+        // slightly-off-axis swipe; consume it too so it doesn't fall through
+        // to the system and switch to the next widget.
+        return true;
     }
 
     function onNextPage() as Boolean {
