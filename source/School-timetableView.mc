@@ -65,16 +65,24 @@ class TimetableView extends WatchUi.View {
 
         var dayIdx = cursor / 1000;
         var periodIdx = cursor % 1000;
+        var step = delta > 0 ? 1 : -1;
 
-        periodIdx += delta;
-        while (periodIdx < 0) {
-            dayIdx = (dayIdx - 1 + numDays) % numDays;
-            periodIdx += numPeriods;
-        }
-        while (periodIdx >= numPeriods) {
-            dayIdx = (dayIdx + 1) % numDays;
-            periodIdx -= numPeriods;
-        }
+        // Step one period at a time so trailing-free periods (end of the school day)
+        // can be skipped over instead of landing on them.
+        var guard = numDays * numPeriods + 1;
+        do {
+            periodIdx += step;
+            while (periodIdx < 0) {
+                dayIdx = (dayIdx - 1 + numDays) % numDays;
+                periodIdx += numPeriods;
+            }
+            while (periodIdx >= numPeriods) {
+                dayIdx = (dayIdx + 1) % numDays;
+                periodIdx -= numPeriods;
+            }
+            guard -= 1;
+        } while (guard > 0 && timetable.isTrailingFree(timetable.activeDays[dayIdx], periodIdx));
+
         cursor = dayIdx * 1000 + periodIdx;
         WatchUi.requestUpdate();
     }

@@ -265,6 +265,15 @@ class Timetable {
         return arr[periodIdx];
     }
 
+    // True if this period and every period after it (that day) are free —
+    // i.e. there's no more school left that day from here on.
+    function isTrailingFree(day as Number, periodIdx as Number) as Boolean {
+        for (var i = periodIdx; i < periods.size(); i++) {
+            if (!subjectAt(day, i).equals("")) { return false; }
+        }
+        return true;
+    }
+
     function isDayActive(day as Number) as Boolean {
         for (var i = 0; i < activeDays.size(); i++) {
             if (activeDays[i] == day) { return true; }
