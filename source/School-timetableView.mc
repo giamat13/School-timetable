@@ -91,6 +91,19 @@ class TimetableView extends WatchUi.View {
         WatchUi.requestUpdate();
     }
 
+    // (dayIdx, periodIdx) of the slot right after the cursor, for the "next up" preview.
+    function nextSlot() as Array<Number> {
+        var numPeriods = timetable.periods.size();
+        var numDays = timetable.activeDays.size();
+        var dayIdx = cursor / 1000;
+        var periodIdx = cursor % 1000 + 1;
+        if (periodIdx >= numPeriods) {
+            dayIdx = (dayIdx + 1) % numDays;
+            periodIdx = 0;
+        }
+        return [dayIdx, periodIdx] as Array<Number>;
+    }
+
     function onUpdate(dc as Dc) as Void {
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
         dc.clear();
@@ -123,7 +136,23 @@ class TimetableView extends WatchUi.View {
 
         var subjectColor = period.isBreak ? Graphics.COLOR_ORANGE : Graphics.COLOR_WHITE;
         dc.setColor(subjectColor, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, h * 0.5, Graphics.FONT_LARGE, subject, Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+        dc.drawText(cx, h * 0.46, Graphics.FONT_LARGE, subject, Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+
+        if (timetable.activeDays.size() > 0 && timetable.periods.size() > 0) {
+            var next = nextSlot();
+            var nextDay = timetable.activeDays[next[0]];
+            var nextPeriod = timetable.periods[next[1]];
+            var nextSubject = timetable.subjectAt(nextDay, next[1]);
+            if (nextSubject.equals("")) {
+                nextSubject = "Free";
+            }
+            var nextLabel = "Next: " + nextSubject + "  " + nextPeriod.startLabel;
+            if (nextDay != day) {
+                nextLabel = "Next: " + nextSubject + "  " + DAY_NAMES[nextDay] + " " + nextPeriod.startLabel;
+            }
+            dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(cx, h * 0.68, Graphics.FONT_XTINY, nextLabel, Graphics.TEXT_JUSTIFY_CENTER);
+        }
 
         var clockTime = System.getClockTime();
         var hour = clockTime.hour;
