@@ -71,13 +71,63 @@ class Timetable {
 
     // Dispatches to the current compact parser (v2, seeds prefixed "2|") or the
     // original verbose parser (v1, no prefix) for backward-compat import of old seeds.
-    // New seeds are always generated in v2 by the web tool; v1 parsing exists only
-    // so timetables saved before the compact format still load.
+    // New single-week seeds are always generated in v2 by the web tool; v1 parsing
+    // exists only so timetables saved before the compact format still load.
     static function parse(seed as String) as Timetable? {
         if (seed.length() >= 2 && seed.substring(0, 2).equals("2|")) {
             return Timetable.parseV2(seed.substring(2, seed.length()));
         }
         return Timetable.parseV1(seed);
+    }
+
+    // Top-level entry point: handles a plain single-week seed (v1/v2) as well as
+    // a multi-week seed (v3, prefixed "3|") that holds one Timetable per calendar
+    // week, keyed by an absolute "week of year" number. For v3, resolves and
+    // returns whichever week's Timetable should be shown right now.
+    static function parseSchedule(seed as String) as Timetable? {
+        if (seed.length() >= 2 && seed.substring(0, 2).equals("3|")) {
+            var schedule = Timetable.parseV3(seed.substring(2, seed.length()));
+            if (schedule == null) { return null; }
+            return schedule.currentTimetable();
+        }
+        return Timetable.parse(seed);
+    }
+
+    // Multi-week format: 3|<weekKey>@<v2 body>~<weekKey>@<v2 body>~...
+    // Each <v2 body> is exactly the T=/D=/S=/L= body used by v2 (no "2|" prefix).
+    // weekKey is year*100 + weekOfYear (see currentWeekKey), an absolute week
+    // number - NOT a relative "+1 week" offset - so the schedule stays correct
+    // no matter when the seed is (re)loaded onto the watch.
+    static function parseV3(body as String) as WeeklyTimetable? {
+        var entries = Timetable.splitStr(body, "~");
+        var weeks = {} as Dictionary<Number, Timetable>;
+        for (var i = 0; i < entries.size(); i++) {
+            var entry = entries[i] as String;
+            var at = entry.find("@");
+            if (at == null) { continue; }
+            var weekKey = (entry.substring(0, at) as String).toNumber();
+            if (weekKey == null) { continue; }
+            var tt = Timetable.parseV2(entry.substring(at + 1, entry.length()));
+            if (tt != null) {
+                weeks[weekKey] = tt;
+            }
+        }
+        if (weeks.size() == 0) {
+            return null;
+        }
+        return new WeeklyTimetable(weeks);
+    }
+
+    // Absolute "week of year" key for the current date: year*100 + weekOfYear,
+    // where weekOfYear = ceil(day_of_year / 7). Deliberately simple (not strict
+    // ISO-8601) so it's trivial to replicate exactly in the web seed-generator's
+    // JavaScript - it only needs to agree with that tool, not with any external
+    // week-numbering standard. Combining with the year avoids collisions across
+    // a year boundary (e.g. week 2 of 2026 vs week 2 of 2027).
+    static function currentWeekKey() as Number {
+        var info = Gregorian.info(Time.now(), Time.FORMAT_SHORT);
+        var week = (info.day_of_year + 6) / 7; // integer division == ceil(day_of_year/7)
+        return info.year * 100 + week;
     }
 
     // Compact format: 2|T=<b36start>-<b36end>B?,...|D=0,1,...|S=subj,subj,...|L=d:code,code,...;...
@@ -298,5 +348,49 @@ class Timetable {
             }
         }
         return periods.size();
+    }
+}
+
+// Holds one Timetable per calendar week (keyed by Timetable.currentWeekKey-style
+// absolute week numbers) and resolves which one is "current". Produced by
+// Timetable.parseV3 for multi-week (v3) seeds.
+class WeeklyTimetable {
+    var weeks as Dictionary<Number, Timetable>;
+
+    function initialize(w as Dictionary<Number, Timetable>) {
+        weeks = w;
+    }
+
+    // Picks the Timetable to show right now: an exact match for the current
+    // week if one was configured; otherwise the most recently *past* configured
+    // week (schedules are assumed to carry over until a newer one is defined);
+    // otherwise, if only future weeks were configured, the earliest of those.
+    function currentTimetable() as Timetable? {
+        var key = Timetable.currentWeekKey();
+        if (weeks.hasKey(key)) {
+            return weeks.get(key) as Timetable;
+        }
+
+        var bestPastKey = -1;
+        var bestPast = null;
+        var bestFutureKey = 999999999;
+        var bestFuture = null;
+
+        var keys = weeks.keys();
+        for (var i = 0; i < keys.size(); i++) {
+            var k = keys[i] as Number;
+            if (k <= key && k > bestPastKey) {
+                bestPastKey = k;
+                bestPast = weeks.get(k);
+            }
+            if (k > key && k < bestFutureKey) {
+                bestFutureKey = k;
+                bestFuture = weeks.get(k);
+            }
+        }
+
+        if (bestPast != null) { return bestPast as Timetable; }
+        if (bestFuture != null) { return bestFuture as Timetable; }
+        return null;
     }
 }

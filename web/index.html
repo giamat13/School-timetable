@@ -231,12 +231,28 @@
   </div>
 
   <div class="card">
-    <h2>1. School days</h2>
+    <h2>1. Weekly schedule</h2>
+    <div class="days-row">
+      <div class="day-toggle active" id="modeSingle" onclick="setMode(false)">Same every week</div>
+      <div class="day-toggle" id="modeMulti" onclick="setMode(true)">Different each week</div>
+    </div>
+    <div id="weeksAheadRow" style="display:none; margin-top:12px;">
+      <label>Weeks to configure (including this week):
+        <input type="number" id="weeksAheadInput" min="1" max="8" value="2" style="width:60px;">
+      </label>
+      <button class="btn-secondary" onclick="applyWeeksAhead()">Apply</button>
+    </div>
+    <div class="days-row" id="weekTabsRow" style="display:none; margin-top:12px;"></div>
+    <p class="hint" id="weekModeHint">Each week is stored by its actual week-of-year number, so the schedule always matches the right calendar week - not "next week" relative to when you generated it.</p>
+  </div>
+
+  <div class="card">
+    <h2>2. School days</h2>
     <div class="days-row" id="daysRow"></div>
   </div>
 
   <div class="card">
-    <h2>2. Lesson periods</h2>
+    <h2>3. Lesson periods</h2>
     <div class="periods-list" id="periodsList"></div>
     <div class="actions-row">
       <button class="btn-add" onclick="addPeriod()">+ Add period</button>
@@ -244,7 +260,7 @@
   </div>
 
   <div class="card">
-    <h2>3. Timetable</h2>
+    <h2>4. Timetable</h2>
     <div class="table-wrap">
       <table id="grid"></table>
     </div>
@@ -252,7 +268,7 @@
   </div>
 
   <div class="card">
-    <h2>4. SEED code</h2>
+    <h2>5. SEED code</h2>
     <p class="hint" style="color:#f59e0b">⚠ The watch does not support non-Latin scripts — use English or Latin transliteration for subject names (e.g. Math, Hebrew, PE).</p>
     <button class="btn-primary" onclick="generateSeed()">Generate SEED</button>
     <div id="seedBox">Click "Generate SEED" to produce the code</div>
@@ -278,6 +294,107 @@ let periods = [
 ];
 // lessons[dayCode] = array of subject strings, index-aligned with periods
 let lessons = {};
+
+// Multi-week ("different each week") state. When multiWeek is true, the globals
+// above (activeDays/periods/lessons) always hold whichever week is currently
+// being edited (weekConfigs[currentWeekIdx]); switching tabs snapshots them
+// back into weekConfigs first.
+let multiWeek = false;
+let weekConfigs = []; // [{activeDays, periods, lessons, key, label}, ...]
+let currentWeekIdx = 0;
+
+// Absolute "week of year" key: year*100 + weekOfYear, weekOfYear = ceil(dayOfYear/7).
+// Must match Timetable.currentWeekKey() on the watch exactly.
+function computeWeekKey(date) {
+  const year = date.getFullYear();
+  const start = new Date(year, 0, 1);
+  const dayOfYear = Math.floor((date - start) / 86400000) + 1;
+  const week = Math.ceil(dayOfYear / 7);
+  return year * 100 + week;
+}
+function formatDateShort(d) {
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function setMode(multi) {
+  snapshotCurrent();
+  multiWeek = multi;
+  document.getElementById("modeSingle").classList.toggle("active", !multi);
+  document.getElementById("modeMulti").classList.toggle("active", multi);
+  document.getElementById("weeksAheadRow").style.display = multi ? "block" : "none";
+  if (multi) {
+    if (weekConfigs.length === 0) { applyWeeksAhead(); }
+    else { renderWeekTabs(); }
+  } else {
+    document.getElementById("weekTabsRow").style.display = "none";
+  }
+}
+
+// Rebuilds weekConfigs for "this week + N-1 more", reusing any config that
+// already exists for a given week key (e.g. after changing the count) so
+// edits aren't lost.
+function applyWeeksAhead() {
+  snapshotCurrent();
+  const n = Math.max(1, Math.min(8, parseInt(document.getElementById("weeksAheadInput").value, 10) || 1));
+  document.getElementById("weeksAheadInput").value = n;
+  const today = new Date();
+  const newConfigs = [];
+  for (let i = 0; i < n; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() + i * 7);
+    const key = computeWeekKey(d);
+    const end = new Date(d);
+    end.setDate(end.getDate() + 6);
+    const existing = weekConfigs.find(w => w.key === key);
+    newConfigs.push(existing || {
+      activeDays: activeDays.slice(),
+      periods: periods.map(p => p.slice()),
+      lessons: {},
+      key,
+      label: `Week ${key % 100} (${formatDateShort(d)}\u2013${formatDateShort(end)})`
+    });
+  }
+  weekConfigs = newConfigs;
+  loadWeek(0);
+}
+
+function snapshotCurrent() {
+  if (!multiWeek || weekConfigs.length === 0) { return; }
+  weekConfigs[currentWeekIdx] = {
+    activeDays: activeDays.slice(),
+    periods: periods.map(p => p.slice()),
+    lessons: JSON.parse(JSON.stringify(lessons)),
+    key: weekConfigs[currentWeekIdx].key,
+    label: weekConfigs[currentWeekIdx].label
+  };
+}
+
+function loadWeek(idx) {
+  currentWeekIdx = idx;
+  const w = weekConfigs[idx];
+  activeDays = w.activeDays.slice();
+  periods = w.periods.map(p => p.slice());
+  lessons = JSON.parse(JSON.stringify(w.lessons));
+  initLessons();
+  renderDays();
+  renderPeriods();
+  renderGrid();
+  renderWeekTabs();
+}
+
+function renderWeekTabs() {
+  const row = document.getElementById("weekTabsRow");
+  if (!multiWeek) { row.style.display = "none"; return; }
+  row.style.display = "flex";
+  row.innerHTML = "";
+  weekConfigs.forEach((w, i) => {
+    const el = document.createElement("div");
+    el.className = "day-toggle" + (i === currentWeekIdx ? " active" : "");
+    el.textContent = w.label;
+    el.onclick = () => { snapshotCurrent(); loadWeek(i); };
+    row.appendChild(el);
+  });
+}
 
 function initLessons() {
   DAY_CODES.forEach(d => {
@@ -407,31 +524,28 @@ function timeToMinutes(hhmm) {
 // into a dictionary (S) and referenced by base36 index in L, so a repeated subject costs one
 // or two characters instead of being spelled out again. L only lists non-break periods —
 // breaks aren't given a slot at all, since they're the same "Break" on every day.
-function generateSeed() {
-  const box = document.getElementById("seedBox");
+// Builds the shared "T=...|D=...|S=...|L=..." body (no version prefix) used by
+// both the single-week (v2) and multi-week (v3) seed formats. Returns
+// {error: [...]} if non-ASCII subjects were found, else {body: "..."}.
+function buildBody(periodsArr, daysArr, lessonsObj) {
   const nonAscii = [];
-  activeDays.forEach(d => {
-    periods.forEach((p, i) => {
+  daysArr.forEach(d => {
+    periodsArr.forEach((p, i) => {
       if (p[2]) return;
-      const val = ((lessons[d] && lessons[d][i]) || "").trim();
+      const val = ((lessonsObj[d] && lessonsObj[d][i]) || "").trim();
       if (val && !/^[\x20-\x7E]*$/.test(val)) {
         nonAscii.push(`${DAY_NAMES[d]}, period ${i+1}: "${val}"`);
       }
     });
   });
-  if (nonAscii.length) {
-    box.style.color = "var(--danger)";
-    box.textContent = "Error: the watch does not support non-English characters. Please fix:\n" + nonAscii.join("\n");
-    return;
-  }
-  box.style.color = "";
+  if (nonAscii.length) { return { error: nonAscii }; }
 
-  const tStr = "T=" + periods.map(p => {
+  const tStr = "T=" + periodsArr.map(p => {
     const start = timeToMinutes(p[0]).toString(36);
     const end = timeToMinutes(p[1]).toString(36);
     return `${start}-${end}${p[2] ? "B" : ""}`;
   }).join(",");
-  const dStr = "D=" + activeDays.join(",");
+  const dStr = "D=" + daysArr.join(",");
 
   const dictionary = [];
   const indexOf = new Map();
@@ -443,19 +557,53 @@ function generateSeed() {
     return idx;
   }
 
-  const lStr = "L=" + activeDays.map(d => {
+  const lStr = "L=" + daysArr.map(d => {
     const codes = [];
-    periods.forEach((p, i) => {
+    periodsArr.forEach((p, i) => {
       if (p[2]) return; // breaks get no slot at all
-      const val = ((lessons[d] && lessons[d][i]) || "").trim();
+      const val = ((lessonsObj[d] && lessonsObj[d][i]) || "").trim();
       codes.push(val ? subjectIndex(val).toString(36) : "");
     });
     return `${d}:${codes.join(",")}`;
   }).join(";");
   const sStr = "S=" + dictionary.join(",");
 
-  const seed = "2|" + [tStr, dStr, sStr, lStr].join("|");
-  box.textContent = seed;
+  return { body: [tStr, dStr, sStr, lStr].join("|") };
+}
+
+// Compact v2 seed: 2|T=<b36start>-<b36end>B?,...|D=0,1,...|S=subj,subj,...|L=d:code,code,...;...
+// Multi-week v3 seed: 3|<weekKey>@<v2 body>~<weekKey>@<v2 body>~...
+// weekKey = year*100 + weekOfYear (see computeWeekKey) - an absolute week
+// number, not a relative offset - so it still matches the right calendar
+// week whenever the watch loads it.
+function generateSeed() {
+  const box = document.getElementById("seedBox");
+
+  if (!multiWeek) {
+    const result = buildBody(periods, activeDays, lessons);
+    if (result.error) {
+      box.style.color = "var(--danger)";
+      box.textContent = "Error: the watch does not support non-English characters. Please fix:\n" + result.error.join("\n");
+      return;
+    }
+    box.style.color = "";
+    box.textContent = "2|" + result.body;
+    return;
+  }
+
+  snapshotCurrent();
+  const parts = [];
+  for (const w of weekConfigs) {
+    const result = buildBody(w.periods, w.activeDays, w.lessons);
+    if (result.error) {
+      box.style.color = "var(--danger)";
+      box.textContent = `Error in ${w.label}: the watch does not support non-English characters. Please fix:\n` + result.error.join("\n");
+      return;
+    }
+    parts.push(`${w.key}@${result.body}`);
+  }
+  box.style.color = "";
+  box.textContent = "3|" + parts.join("~");
 }
 
 function copySeed() {
@@ -581,15 +729,53 @@ function importSeed() {
   }
 
   try {
-    const result = raw.startsWith("2|") ? parseSeedV2(raw.slice(2)) : parseSeedV1(raw);
+    if (raw.startsWith("3|")) {
+      const entries = raw.slice(2).split("~").filter(x => x.length);
+      if (entries.length === 0) { throw new Error("No weeks found."); }
 
-    periods = result.periods;
-    activeDays = result.days.sort((a,b)=>a-b);
-    lessons = result.lessons;
-    initLessons();
-    renderDays();
-    renderPeriods();
-    renderGrid();
+      weekConfigs = entries.map(entry => {
+        const at = entry.indexOf("@");
+        if (at === -1) { throw new Error(`Bad week entry: "${entry}"`); }
+        const key = parseInt(entry.slice(0, at), 10);
+        if (isNaN(key)) { throw new Error(`Bad week number in: "${entry}"`); }
+        const result = parseSeedV2(entry.slice(at + 1));
+        const year = Math.floor(key / 100);
+        const week = key % 100;
+        const approxStart = new Date(year, 0, 1 + (week - 1) * 7);
+        const approxEnd = new Date(approxStart);
+        approxEnd.setDate(approxEnd.getDate() + 6);
+        return {
+          activeDays: result.days.sort((a,b)=>a-b),
+          periods: result.periods,
+          lessons: result.lessons,
+          key,
+          label: `Week ${week} (${formatDateShort(approxStart)}\u2013${formatDateShort(approxEnd)})`
+        };
+      }).sort((a, b) => a.key - b.key);
+
+      multiWeek = true;
+      document.getElementById("modeSingle").classList.remove("active");
+      document.getElementById("modeMulti").classList.add("active");
+      document.getElementById("weeksAheadRow").style.display = "block";
+      document.getElementById("weeksAheadInput").value = weekConfigs.length;
+      loadWeek(0);
+    } else {
+      const result = raw.startsWith("2|") ? parseSeedV2(raw.slice(2)) : parseSeedV1(raw);
+
+      multiWeek = false;
+      document.getElementById("modeSingle").classList.add("active");
+      document.getElementById("modeMulti").classList.remove("active");
+      document.getElementById("weeksAheadRow").style.display = "none";
+      document.getElementById("weekTabsRow").style.display = "none";
+
+      periods = result.periods;
+      activeDays = result.days.sort((a,b)=>a-b);
+      lessons = result.lessons;
+      initLessons();
+      renderDays();
+      renderPeriods();
+      renderGrid();
+    }
 
     msg.className = "success";
     msg.textContent = "SEED loaded successfully.";

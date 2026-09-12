@@ -19,7 +19,7 @@ class School_timetableApp extends Application.AppBase {
         if (seed == null || seed.equals("")) {
             return [ new NoSeedView() ];
         }
-        var timetable = Timetable.parse(seed);
+        var timetable = Timetable.parseSchedule(seed);
         if (timetable == null) {
             return [ new NoSeedView() ];
         }
