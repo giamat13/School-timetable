@@ -126,7 +126,12 @@ class Timetable {
     // a year boundary (e.g. week 2 of 2026 vs week 2 of 2027).
     static function currentWeekKey() as Number {
         var info = Gregorian.info(Time.now(), Time.FORMAT_SHORT);
-        var week = (info.day_of_year + 6) / 7; // integer division == ceil(day_of_year/7)
+        var daysBeforeMonth = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334] as Array<Number>;
+        var dayOfYear = daysBeforeMonth[info.month - 1] + info.day;
+        if (info.month > 2 && (info.year % 4 == 0 && (info.year % 100 != 0 || info.year % 400 == 0))) {
+            dayOfYear++;
+        }
+        var week = (dayOfYear + 6) / 7; // integer division == ceil(dayOfYear/7)
         return info.year * 100 + week;
     }
 
